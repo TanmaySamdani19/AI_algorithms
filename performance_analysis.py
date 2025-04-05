@@ -1,58 +1,99 @@
-import matplotlib.pyplot as plt
-from main import run_game, TicTacToe, ConnectFour, Minimax, QLearning, DefaultOpponent
+import numpy as np
+import time
+from games.tic_tac_toe import TicTacToe
+from games.connect_four import ConnectFour
 
-def plot_performance_comparison():
-    # Tic Tac Toe experiments
-    ttt_games = [TicTacToe() for _ in range(3)]
-    ttt_minimax = [Minimax(game) for game in ttt_games]
-    ttt_q_learning = [QLearning(game) for game in ttt_games]
-    ttt_default_opponent = [DefaultOpponent(game) for game in ttt_games]
+from agents.minimax import Minimax
+from agents.q_learning import QLearning
+from agents.default_opponent import DefaultOpponent
 
-    # Train Q-Learning
-    for ql in ttt_q_learning:
-        ql.train()
+def run_performance_analysis(game_type='tic_tac_toe', num_games=100, train_episodes=1000):
+    """
+    Run performance analysis for different agents.
+    
+    Args:
+        game_type (str): Type of game ('tic_tac_toe' or 'connect_four')
+        num_games (int): Number of games to simulate for evaluation
+        train_episodes (int): Number of episodes to train Q-learning agent
+    """
+    if game_type == 'tic_tac_toe':
+        game_class = TicTacToe
+    else:
+        game_class = ConnectFour
 
-    # Run experiments
-    minimax_results = [run_game(game, minimax, opponent) 
-                       for game, minimax, opponent in zip(ttt_games, ttt_minimax, ttt_default_opponent)]
-    q_learning_results = [run_game(game, q_learning, opponent) 
-                          for game, q_learning, opponent in zip(ttt_games, ttt_q_learning, ttt_default_opponent)]
+    # Train Q-learning agent
+    game = game_class()
+    q_agent = QLearning(game)
+    q_agent.train(episodes=train_episodes)
 
-    # Prepare data for plotting
-    algorithms = ['Minimax', 'Q-Learning']
-    wins = [
-        [result['algorithm_wins'] for result in minimax_results],
-        [result['algorithm_wins'] for result in q_learning_results]
-    ]
-    draws = [
-        [result['draws'] for result in minimax_results],
-        [result['draws'] for result in q_learning_results]
-    ]
-    losses = [
-        [result['opponent_wins'] for result in minimax_results],
-        [result['opponent_wins'] for result in q_learning_results]
-    ]
+    results = {
+        'minimax_vs_default': {'wins': 0, 'draws': 0, 'losses': 0, 'times': []},
+        'q_learning_vs_default': {'wins': 0, 'draws': 0, 'losses': 0, 'times': []},
+        'minimax_vs_q_learning': {'wins': 0, 'draws': 0, 'losses': 0, 'times': []}
+    }
 
-    # Plotting
-    plt.figure(figsize=(10, 6))
-    x = range(len(algorithms))
-    width = 0.25
+    for matchup in results.keys():
+        parts = matchup.split('_vs_')
+        agent1_type = parts[0]
+        agent2_type = parts[1]
+        for _ in range(num_games):
+            game = game_class()
+            if agent1_type == 'minimax':
+                agent1 = Minimax(game, max_depth=5 if game_type == 'tic_tac_toe' else 3, use_alpha_beta=True, eval_strategy='advanced')
+            elif agent1_type == 'q_learning':
+                agent1 = q_agent
+            else:
+                agent1 = DefaultOpponent(game)
 
-    plt.bar([i-width for i in x], [sum(wins[i])/len(wins[i]) for i in range(len(algorithms))], 
-            width, label='Wins', color='green')
-    plt.bar(x, [sum(draws[i])/len(draws[i]) for i in range(len(algorithms))], 
-            width, label='Draws', color='yellow')
-    plt.bar([i+width for i in x], [sum(losses[i])/len(losses[i]) for i in range(len(algorithms))], 
-            width, label='Losses', color='red')
+            if agent2_type == 'minimax':
+                agent2 = Minimax(game, max_depth=5 if game_type == 'tic_tac_toe' else 3, use_alpha_beta=True, eval_strategy='advanced')
+            elif agent2_type == 'q_learning':
+                agent2 = q_agent
+            else:
+                agent2 = DefaultOpponent(game)
 
-    plt.xlabel('Algorithms')
-    plt.ylabel('Performance Ratio')
-    plt.title('Tic Tac Toe Algorithm Performance')
-    plt.xticks(x, algorithms)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig('ttt_performance.png')
-    plt.close()
+            while not game.game_over:
+                start_time = time.time()
+                if game.current_player == 1:
+                    if agent1_type == 'minimax':
+                        move = agent1.get_best_move()
+                    elif agent1_type == 'q_learning':
+                        valid_moves = game.get_valid_moves()
+                        move = agent1.choose_action(valid_moves)
+                    else:
+                        move = agent1.get_move()
+                else:
+                    if agent2_type == 'minimax':
+                        move = agent2.get_best_move()
+                    elif agent2_type == 'q_learning':
+                        valid_moves = game.get_valid_moves()
+                        move = agent2.choose_action(valid_moves)
+                    else:
+                        move = agent2.get_move()
+
+                if isinstance(game, TicTacToe):
+                    row, col = move
+                    game.make_move(row, col)
+                else:
+                    game.make_move(move)
+
+                end_time = time.time()
+                results[matchup]['times'].append(end_time - start_time)
+
+            if game.winner == 1:
+                results[matchup]['wins'] += 1
+            elif game.winner == -1:
+                results[matchup]['losses'] += 1
+            else:
+                results[matchup]['draws'] += 1
+
+    # Print results
+    for matchup, data in results.items():
+        print(f"{matchup}:")
+        print(f"  Wins: {data['wins']}")
+        print(f"  Draws: {data['draws']}")
+        print(f"  Losses: {data['losses']}")
+        print(f"  Average time per move: {np.mean(data['times']):.4f} seconds")
 
 if __name__ == "__main__":
-    plot_performance_comparison()
+    run_performance_analysis('connect_four', num_games=100, train_episodes=10000)
