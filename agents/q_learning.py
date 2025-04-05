@@ -7,7 +7,7 @@ class QLearning:
     """
     Implements tabular Q-learning for Tic Tac Toe and Connect Four.
     """
-    def __init__(self, game, learning_rate=0.1, discount_factor=0.9, exploration_rate=0.1):
+    def __init__(self, game,player=1, learning_rate=0.1, discount_factor=0.9, exploration_rate=0.1):
         """
         Initialize Q-learning with game instance and parameters.
         
@@ -18,6 +18,7 @@ class QLearning:
             exploration_rate (float): Rate for exploration vs exploitation
         """
         self.game = game
+        self.player = player
         self.learning_rate = learning_rate
         self.discount_factor = discount_factor
         self.exploration_rate = exploration_rate
@@ -90,11 +91,6 @@ class QLearning:
         self.q_table[state][action] = new_q
 
     def train(self, episodes=1000):
-        """
-        Train the agent for specified number of episodes.
-        Args:
-            episodes (int): Number of training episodes
-        """
         for _ in range(episodes):
             self.game.reset()
             state = self.get_state()
@@ -109,19 +105,19 @@ class QLearning:
                 if isinstance(self.game, TicTacToe):
                     row, col = action
                     self.game.make_move(row, col)
-                else:  # Connect Four
+                else:
                     self.game.make_move(action)
 
                 next_state = self.get_state()
                 next_valid_moves = self.get_valid_moves()
 
                 if self.game.game_over:
-                    if self.game.winner == 1:
+                    if self.game.winner == self.player:
                         reward = 1
-                    elif self.game.winner == -1:
+                    elif self.game.winner == -self.player:
                         reward = -1
                     else:
-                        reward = 0  # Draw
+                        reward = 0
                     done = True
                 else:
                     reward = 0
