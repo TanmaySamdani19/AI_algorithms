@@ -1,4 +1,5 @@
 import math
+import random
 from typing import Union
 from games.tic_tac_toe import TicTacToe
 from games.connect_four import ConnectFour
@@ -57,7 +58,7 @@ class Minimax:
                     if beta <= alpha:
                         break
 
-            return max_eval
+            return max_eval if self.game.get_valid_moves() else -math.inf
         else:
             min_eval = math.inf
             for move in self.game.get_valid_moves():
@@ -75,7 +76,7 @@ class Minimax:
                     if beta <= alpha:
                         break
 
-            return min_eval
+            return min_eval if self.game.get_valid_moves() else math.inf
 
     def _get_winner(self):
         """
@@ -211,22 +212,35 @@ class Minimax:
         """
         Find the best move using Minimax.
         Returns:
-            Move: Best move found, or None if no valid moves
+            Move: Best move found, or a random valid move if none found
         """
-        best_score = -math.inf
-        best_move = None
-        
-        for move in self.game.get_valid_moves():
-            move_result = self._simulate_move(move, 1)
+        valid_moves = self.game.get_valid_moves()
+        if not valid_moves:
+            return None
+
+        best_score = -math.inf if self.game.current_player == 1 else math.inf
+        best_moves = []
+
+        for move in valid_moves:
+            move_result = self._simulate_move(move, self.game.current_player)
             if move_result is None:
                 continue
             
-            move_score = self.minimax(self.max_depth-1, False)
+            move_score = self.minimax(self.max_depth-1, self.game.current_player == -1)
             
             self._undo_move(move, move_result)
-            
-            if move_score > best_score:
-                best_score = move_score
-                best_move = move
-        
-        return best_move
+
+            if self.game.current_player == 1:
+                if move_score > best_score:
+                    best_score = move_score
+                    best_moves = [move]
+                elif move_score == best_score:
+                    best_moves.append(move)
+            else:
+                if move_score < best_score:
+                    best_score = move_score
+                    best_moves = [move]
+                elif move_score == best_score:
+                    best_moves.append(move)
+
+        return random.choice(best_moves) if best_moves else random.choice(valid_moves)

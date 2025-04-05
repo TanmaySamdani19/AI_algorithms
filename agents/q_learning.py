@@ -7,21 +7,28 @@ class QLearning:
     """
     Implements tabular Q-learning for Tic Tac Toe and Connect Four.
     """
-    def __init__(self, game,player=1, learning_rate=0.1, discount_factor=0.9, exploration_rate=0.1):
+    def __init__(self, game, player=1, learning_rate=0.1, discount_factor=0.9, 
+                 initial_exploration_rate=0.1, min_exploration_rate=0.01, decay_rate=0.995):
         """
         Initialize Q-learning with game instance and parameters.
         
         Args:
             game: Game instance (TicTacToe or ConnectFour)
+            player (int): Player number
             learning_rate (float): Learning rate for updates
             discount_factor (float): Discount factor for future rewards
-            exploration_rate (float): Rate for exploration vs exploitation
+            initial_exploration_rate (float): Initial rate for exploration
+            min_exploration_rate (float): Minimum exploration rate
+            decay_rate (float): Multiplicative factor to decay exploration rate
         """
         self.game = game
         self.player = player
         self.learning_rate = learning_rate
         self.discount_factor = discount_factor
-        self.exploration_rate = exploration_rate
+        self.initial_exploration_rate = initial_exploration_rate
+        self.min_exploration_rate = min_exploration_rate
+        self.decay_rate = decay_rate
+        self.exploration_rate = initial_exploration_rate
         self.q_table: Dict[Tuple, Dict[int, float]] = {}
         self.state_history = []
 
@@ -71,7 +78,6 @@ class QLearning:
         q_values = [self.get_action(state, move) for move in valid_moves]
         return valid_moves[np.argmax(q_values)]
 
-
     def update_q_table(self, state, action, reward, next_state, next_valid_moves):
         """
         Update Q-table using Q-learning update rule.
@@ -91,7 +97,7 @@ class QLearning:
         self.q_table[state][action] = new_q
 
     def train(self, episodes=1000):
-        for _ in range(episodes):
+        for episode in range(episodes):
             self.game.reset()
             state = self.get_state()
             done = False
@@ -114,7 +120,7 @@ class QLearning:
                 if self.game.game_over:
                     if self.game.winner == self.player:
                         reward = 1
-                    elif self.game.winner == -self.player:
+                    elif self.game.winner == -1:
                         reward = -1
                     else:
                         reward = 0
@@ -124,6 +130,12 @@ class QLearning:
 
                 self.update_q_table(state, action, reward, next_state, next_valid_moves)
                 state = next_state
+
+            # Decay exploration rate after each episode
+            self.exploration_rate = max(self.min_exploration_rate, 
+                                        self.exploration_rate * self.decay_rate)
+            
+        return
 
     def play(self):
         """

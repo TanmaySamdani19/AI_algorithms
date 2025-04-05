@@ -25,6 +25,10 @@ def play_game(game_type='tic_tac_toe', agent1_type='minimax', agent2_type='defau
     """Play a game between two agents with detailed output."""
     game = TicTacToe() if game_type == 'tic_tac_toe' else ConnectFour()
     
+    # Handle the case where minimax_params is None
+    if minimax_params is None:
+        minimax_params = {"use_alpha_beta": True}
+    
     agent1, agent2 = initialize_agents(game, agent1_type, agent2_type, train_episodes, minimax_params)
     
     logging.info(f"Starting {game_type} game: {agent1_type} vs {agent2_type}")
@@ -37,11 +41,19 @@ def play_game(game_type='tic_tac_toe', agent1_type='minimax', agent2_type='defau
         move = get_agent_move(current_agent, game)
         move_time = time.time() - start_time
         
-        make_move(game, move, game_type)
-        print(f"\nPlayer {game.current_player} ({type(current_agent).__name__}) move: {move}")
-        game.print_board()
-        print(f"Move time: {move_time:.4f}s")
-        logging.info(f"Player {game.current_player} move: {move}, Time: {move_time:.4f}s")
+        if move is None:
+            logging.error("Received None move, ending game")
+            break
+            
+        try:
+            make_move(game, move, game_type)
+            print(f"\nPlayer {game.current_player} ({type(current_agent).__name__}) move: {move}")
+            game.print_board()
+            print(f"Move time: {move_time:.4f}s")
+            logging.info(f"Player {game.current_player} move: {move}, Time: {move_time:.4f}s")
+        except Exception as e:
+            logging.error(f"Error making move: {e}")
+            break
     
     announce_result(game)
     return game.winner
@@ -51,12 +63,15 @@ def play_game(game_type='tic_tac_toe', agent1_type='minimax', agent2_type='defau
 # ------------------------------
 def initialize_agents(game, agent1_type, agent2_type, train_episodes, minimax_params):
     """Initialize agents based on type."""
+    # Handle the case where minimax_params is None
+    if minimax_params is None:
+        minimax_params = {"use_alpha_beta": True}
+        
     agents = {}
     for agent_type, player in [(agent1_type, 1), (agent2_type, -1)]:
         if agent_type == 'minimax':
-            params = minimax_params or {"use_alpha_beta": True}
             agents[player] = Minimax(game, max_depth=5 if isinstance(game, TicTacToe) else 3,
-                                   use_alpha_beta=params.get("use_alpha_beta", True), eval_strategy='advanced')
+                                   use_alpha_beta=minimax_params.get("use_alpha_beta", True), eval_strategy='advanced')
         elif agent_type == 'q_learning':
             agent = QLearning(game, player=player)
             agent.train(train_episodes)
@@ -67,18 +82,23 @@ def initialize_agents(game, agent1_type, agent2_type, train_episodes, minimax_pa
 
 def get_agent_move(agent, game):
     """Get move from agent based on its type."""
-    if isinstance(agent, Minimax):
-        move = agent.get_best_move()
-    elif isinstance(agent, QLearning):
-        move = agent.choose_action(game.get_valid_moves())
-    else:  # DefaultOpponent
-        move = agent.get_move()
-    
-    if move is None:
-        logging.error(f"Agent {type(agent).__name__} returned None move. Valid moves: {game.get_valid_moves()}")
+    try:
+        if isinstance(agent, Minimax):
+            move = agent.get_best_move()
+        elif isinstance(agent, QLearning):
+            move = agent.choose_action(game.get_valid_moves())
+        else:  # DefaultOpponent
+            move = agent.get_move()
+        
+        if move is None:
+            logging.error(f"Agent {type(agent).__name__} returned None move. Valid moves: {game.get_valid_moves()}")
+            valid_moves = game.get_valid_moves()
+            move = valid_moves[0] if valid_moves else None  # Fallback to first valid move
+        return move
+    except Exception as e:
+        logging.error(f"Error getting agent move: {e}")
         valid_moves = game.get_valid_moves()
-        move = valid_moves[0] if valid_moves else None  # Fallback to first valid move
-    return move
+        return valid_moves[0] if valid_moves else None  # Fallback to first valid move
 
 def make_move(game, move, game_type):
     """Make a move based on game type with error handling."""
@@ -124,20 +144,34 @@ def run_experiment(game_type, matchup_name, agent1_type, agent2_type, num_games=
     
     for game_num in range(num_games):
         game = game_class()
-        agent1, agent2 = initialize_agents(game, agent1_type, agent2_type, train_episodes,
-                                         {"use_alpha_beta": True} if 'AB' in matchup_name.split()[0] else {"use_alpha_beta": False})
+        minimax_params = {"use_alpha_beta": True} if 'AB' in matchup_name.split()[0] else {"use_alpha_beta": False}
+        agent1, agent2 = initialize_agents(game, agent1_type, agent2_type, train_episodes, minimax_params)
         
         start_game_time = time.time()
+        game_moves_made = 0
+        
         while not game.game_over:
             current_agent = agent1 if game.current_player == 1 else agent2
             start_time = time.time()
             move = get_agent_move(current_agent, game)
             move_time = time.time() - start_time
-            results['move_times'].append(move_time)
-            make_move(game, move, game_type)
+            
+            if move is None:
+                logging.error(f"Game {game_num}: Received None move, ending game")
+                break
+                
+            try:
+                make_move(game, move, game_type)
+                results['move_times'].append(move_time)
+                game_moves_made += 1
+            except Exception as e:
+                logging.error(f"Game {game_num}: Error making move: {e}")
+                break
         
-        game_time = time.time() - start_game_time
-        results['game_times'].append(game_time)
+        # Only record game time if moves were actually made
+        if game_moves_made > 0:
+            game_time = time.time() - start_game_time
+            results['game_times'].append(game_time)
         
         if game.winner == 1:
             results['wins'] += 1
@@ -149,9 +183,11 @@ def run_experiment(game_type, matchup_name, agent1_type, agent2_type, num_games=
         if game_num % 10 == 0:
             logging.info(f"{game_type} - {matchup_name} Game {game_num}: W:{results['wins']}, D:{results['draws']}, L:{results['losses']}")
     
-    results['avg_move_time'] = np.mean(results['move_times'])
-    results['avg_game_time'] = np.mean(results['game_times'])
-    results['win_rate'] = results['wins'] / num_games
+    # Safely calculate averages
+    results['avg_move_time'] = np.mean(results['move_times']) if results['move_times'] else 0.0
+    results['avg_game_time'] = np.mean(results['game_times']) if results['game_times'] else 0.0
+    results['win_rate'] = results['wins'] / num_games if num_games > 0 else 0.0
+    
     print(f"Results: Wins: {results['wins']}, Draws: {results['draws']}, Losses: {results['losses']}, "
           f"Avg Move Time: {results['avg_move_time']:.4f}s, Avg Game Time: {results['avg_game_time']:.4f}s")
     logging.info(f"{game_type} - {matchup_name} Results: {results}")
@@ -224,17 +260,18 @@ def plot_experiment_results(all_results):
         plt.savefig(f'{game_type}_win_rates.png')
         plt.close()
         
-        # Time Analysis
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
-        ax1.bar(matchups, avg_move_times, color='purple')
-        ax1.set_ylabel('Avg Move Time (s)')
-        ax1.set_title(f'{game_type.replace("_", " ").title()} Performance')
-        ax2.bar(matchups, avg_game_times, color='orange')
-        ax2.set_ylabel('Avg Game Time (s)')
-        plt.xticks(rotation=45, ha='right')
-        plt.tight_layout()
-        plt.savefig(f'{game_type}_times.png')
-        plt.close()
+        # Time Analysis - Only create if we have timing data
+        if any(avg_move_times) or any(avg_game_times):
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+            ax1.bar(matchups, avg_move_times, color='purple')
+            ax1.set_ylabel('Avg Move Time (s)')
+            ax1.set_title(f'{game_type.replace("_", " ").title()} Performance')
+            ax2.bar(matchups, avg_game_times, color='orange')
+            ax2.set_ylabel('Avg Game Time (s)')
+            plt.xticks(rotation=45, ha='right')
+            plt.tight_layout()
+            plt.savefig(f'{game_type}_times.png')
+            plt.close()
 
 # ------------------------------
 # Main Execution
