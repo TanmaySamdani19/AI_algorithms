@@ -9,7 +9,7 @@ class Minimax:
     Optimized Minimax algorithm with configurable depth and evaluation strategy,
     supporting both Tic Tac Toe and Connect Four.
     """
-    def __init__(self, game, max_depth=5, use_alpha_beta=True, eval_strategy='simple'):
+    def __init__(self, game, max_depth=10, use_alpha_beta=True, eval_strategy='simple'):
         """
         Initialize Minimax with game instance and parameters.
         
@@ -20,9 +20,10 @@ class Minimax:
             eval_strategy (str): Evaluation strategy ('simple', 'advanced')
         """
         self.game = game
-        self.max_depth = max_depth if isinstance(game, TicTacToe) else 3  # Reduced depth for Connect Four
+        self.max_depth = max_depth if isinstance(game, TicTacToe) else 4  # Reduced depth for Connect Four
         self.use_alpha_beta = use_alpha_beta
         self.eval_strategy = eval_strategy
+        self.nodes_evaluated = 0  # Counter for nodes evaluated during search
 
     def minimax(self, depth, is_maximizing, alpha=-math.inf, beta=math.inf):
         """
@@ -37,6 +38,8 @@ class Minimax:
         Returns:
             float: Evaluation score
         """
+        self.nodes_evaluated += 1  # Increment node counter
+        
         winner = self._get_winner()
         if winner is not None or depth == 0:
             return self._evaluate_board(winner, depth)
@@ -218,6 +221,9 @@ class Minimax:
         if not valid_moves:
             return None
 
+        # Reset node counter before search
+        self.nodes_evaluated = 0
+        
         best_score = -math.inf if self.game.current_player == 1 else math.inf
         best_moves = []
 
